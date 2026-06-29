@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zahlungs-Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+
+  header { background: #1a1a2e; color: white; padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 1.4rem; font-weight: 600; }
+  header span { font-size: 0.82rem; opacity: 0.55; }
+
+  .container { max-width: 920px; margin: 0 auto; padding: 24px 20px; }
+
+  .month-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+  .month-nav button { background: white; border: 1px solid #dde1ea; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 1rem; color: #444; transition: background 0.15s; }
+  .month-nav button:hover { background: #e8eaf0; }
+  .month-select { flex: 1; font-size: 1.1rem; font-weight: 600; color: #1a1a2e; background: white; border: 1px solid #dde1ea; border-radius: 10px; padding: 10px 16px; cursor: pointer; appearance: none; text-align: center; }
+
+  .summary-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+  .card { background: white; border-radius: 12px; padding: 16px 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+  .card .label { font-size: 0.75rem; font-weight: 500; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .card .amount { font-size: 1.35rem; font-weight: 700; color: #1a1a2e; }
+  .card.paid .amount { color: #22c55e; }
+  .card.remaining .amount { color: #ef4444; }
+
+  /* Top-level category section (e.g. Warenbestellungen, PPC…) */
+  .income-card { background: white; border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 14px; padding: 16px 20px; }
+  .income-card-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; margin-bottom: 12px; }
+  .income-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .inc-label { font-size: 0.85rem; color: #666; }
+  .inc-label.received { color: #16a34a; font-weight: 600; }
+  .inc-label.outstanding { color: #d97706; font-weight: 600; }
+  .inc-val { font-size: 0.95rem; font-weight: 700; color: #1a1a2e; }
+  .inc-val.received { color: #16a34a; }
+  .inc-val.outstanding { color: #d97706; }
+  .income-bar-wrap { background: #f0f0f0; border-radius: 6px; height: 8px; margin: 8px 0; overflow: hidden; }
+  .income-bar { height: 100%; background: linear-gradient(90deg, #16a34a, #4ade80); border-radius: 6px; transition: width 0.5s ease; }
+  .income-details { margin-top: 10px; font-size: 0.8rem; color: #888; }
+  .income-details summary { cursor: pointer; color: #6366f1; font-weight: 600; }
+  .income-tx { display: flex; justify-content: space-between; padding: 3px 0; border-top: 1px solid #f0f0f0; margin-top: 4px; }
+  .cat-section { background: white; border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 14px; overflow: hidden; }
+  .cat-header { display: flex; align-items: center; justify-content: space-between; padding: 13px 20px; background: #f0f2f8; border-bottom: 1px solid #e5e8f0; }
+  .cat-header h2 { font-size: 0.88rem; font-weight: 700; color: #333; text-transform: uppercase; letter-spacing: 0.4px; }
+  .cat-header .cat-total { font-size: 0.92rem; font-weight: 700; color: #1a1a2e; }
+
+  /* Order sub-section (within Warenbestellungen) */
+  .order-section { border-bottom: 1px solid #eef0f8; }
+  .order-section:last-child { border-bottom: none; }
+  .order-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px 10px 20px; background: #f8f9fc; border-bottom: 1px solid #f0f2f8; }
+  .order-header .order-name { font-size: 0.85rem; font-weight: 600; color: #1a1a2e; }
+  .order-header .order-meta { font-size: 0.75rem; color: #999; margin-top: 1px; }
+  .order-header .order-total { font-size: 0.88rem; font-weight: 600; color: #555; white-space: nowrap; margin-left: 12px; }
+
+  /* Payment rows */
+  .payment-row { display: flex; align-items: center; gap: 12px; padding: 11px 20px; border-bottom: 1px solid #f5f6fa; transition: background 0.1s; }
+  .payment-row:last-child { border-bottom: none; }
+  .payment-row:hover { background: #fafbfd; }
+  .payment-row.paid-row { opacity: 0.4; }
+  .payment-row input[type="checkbox"] { width: 17px; height: 17px; cursor: pointer; accent-color: #22c55e; flex-shrink: 0; }
+  .payment-row .info { flex: 1; min-width: 0; }
+  .payment-row .name { font-size: 0.9rem; font-weight: 500; color: #1a1a2e; }
+  .payment-row.paid-row .name { text-decoration: line-through; }
+  .payment-row .sub { font-size: 0.76rem; color: #aaa; margin-top: 1px; }
+  .payment-row .amt { font-size: 0.97rem; font-weight: 600; color: #1a1a2e; white-space: nowrap; }
+  .payment-row .amt.negative { color: #22c55e; }
+
+  .badge { display: inline-block; font-size: 0.66rem; padding: 1px 6px; border-radius: 20px; font-weight: 600; margin-left: 5px; vertical-align: middle; }
+  .badge.monthly { background: #e0f2fe; color: #0284c7; }
+  .badge.yearly  { background: #fef3c7; color: #d97706; }
+  .badge.once    { background: #f3e8ff; color: #7c3aed; }
+  .badge.order   { background: #dcfce7; color: #16a34a; }
+
+  .type-tag { display: inline-block; font-size: 0.68rem; padding: 1px 6px; border-radius: 4px; background: #f1f5f9; color: #64748b; margin-left: 5px; font-weight: 500; }
+
+  .empty { text-align: center; padding: 48px; color: #aaa; font-size: 0.9rem; }
+
+  /* CSV Import Button */
+  .csv-btn { background: white; border: 1px solid #dde1ea; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 0.82rem; color: #555; white-space: nowrap; }
+  .csv-btn:hover { background: #e8eaf0; }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal { background: white; border-radius: 16px; max-width: 740px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
+  .modal-head { padding: 18px 22px 14px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; }
+  .modal-head h2 { font-size: 1rem; font-weight: 700; }
+  .modal-head .close-btn { background: none; border: none; font-size: 1.3rem; cursor: pointer; color: #888; }
+  .modal-body { overflow-y: auto; flex: 1; padding: 16px 22px; }
+  .modal-foot { padding: 14px 22px; border-top: 1px solid #eee; display: flex; gap: 10px; justify-content: flex-end; }
+  .modal-foot button { padding: 9px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.88rem; font-weight: 600; }
+  .btn-confirm { background: #22c55e; color: white; }
+  .btn-cancel  { background: #f1f5f9; color: #444; }
+
+  /* Match rows */
+  .match-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; background: #f8f9fc; border: 1px solid #e5e8f0; }
+  .match-row.confirmed { background: #f0fdf4; border-color: #bbf7d0; }
+  .match-row.skipped   { opacity: 0.45; }
+  .match-row input[type=checkbox] { width: 16px; height: 16px; accent-color: #22c55e; flex-shrink: 0; }
+  .match-info { flex: 1; min-width: 0; }
+  .match-bank { font-size: 0.78rem; color: #777; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .match-pay  { font-size: 0.88rem; font-weight: 600; color: #1a1a2e; }
+  .match-sub  { font-size: 0.73rem; color: #aaa; }
+  .conf-pill  { font-size: 0.7rem; font-weight: 700; padding: 2px 7px; border-radius: 12px; white-space: nowrap; }
+  .conf-high  { background: #dcfce7; color: #16a34a; }
+  .conf-med   { background: #fef3c7; color: #d97706; }
+  .conf-low   { background: #fee2e2; color: #dc2626; }
+  .no-match-row { font-size: 0.8rem; color: #aaa; padding: 6px 12px; border-left: 3px solid #ddd; margin-bottom: 4px; }
+
+  @media (max-width: 600px) {
+    .summary-cards { grid-template-columns: 1fr 1fr; }
+    .summary-cards .card:last-child { grid-column: span 2; }
+    header { flex-direction: column; align-items: flex-start; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>💳 Zahlungs-Dashboard</h1>
+  <span id="lastUpdated">FBA Liquiditätsplanung</span>
+  <span id="syncBadge" style="display:none;font-size:0.75rem;background:#334;padding:3px 8px;border-radius:12px;opacity:0.7">⟳ Lädt…</span>
+</header>
+
+<div class="container">
+  <div class="month-nav">
+    <button id="prevBtn">&#8592;</button>
+    <select class="month-select" id="monthSelect"></select>
+    <button id="nextBtn">&#8594;</button>
+    <button class="csv-btn" id="csvBtn">📥 Kontoauszug</button>
+    <input type="file" id="csvFile" accept=".csv,.txt" style="display:none">
+  </div>
+  <div id="modalContainer"></div>
+
+  <div class="summary-cards">
+    <div class="card"><div class="label">Gesamt geplant</div><div class="amount" id="totalAmount">—</div></div>
+    <div class="card paid"><div class="label">Bereits bezahlt</div><div class="amount" id="paidAmount">—</div></div>
+    <div class="card remaining"><div class="label">Noch offen</div><div class="amount" id="remainingAmount">—</div></div>
+  </div>
+
+  <div id="paymentList"></div>
+</div>
+
+<script>
+// ── ORDERS (Warenbestellungen) ─────────────────────────────────────────────
+// payments: { type, date 'YYYY-MM-DD', amount }  (id optional, für localStorage-Kompatibilität)
+let orders = [
+  {
+    id: 'PO20250010', product: 'P4 Laufstall', supplier: 'Hangzou', qty: 230,
+    payments: [
+      { id: 'p1', type: 'QI',          date: '2026-01-31', amount: 2346.00 },
+      { id: 'p2', type: 'Transport',   date: '2026-02-01', amount: 2300.00 },
+      { id: 'p3', type: 'EUSt',        date: '2026-02-01', amount: 1477.06 },
+    ]
+  },
+  {
+    id: 'PO20250013', product: 'P3 Kopfkissen Shredded', supplier: 'Candice', qty: 1548,
+    payments: [
+      { id: 'p1', type: 'Restzahlung', date: '2026-02-05', amount: 6978.38 },
+    ]
+  },
+  {
+    id: 'PO20260001', product: 'P3 Kopfkissen Shredded', supplier: 'Candice', qty: 1500,
+    payments: [
+      { id: 'p1', type: 'Transport',   date: '2026-03-15', amount: 16076.50 },
+      { id: 'p2', type: 'Zoll',        date: '2026-03-15', amount: 924.13 },
+      { id: 'p3', type: 'EUSt',        date: '2026-03-15', amount: 4877.34 },
+      { id: 'p4', type: 'Restzahlung', date: '2026-03-30', amount: 6715.59 },
+    ]
+  },
+  {
+    id: 'PO20260001-2', product: 'P3 Kopfkissen Shredded', supplier: 'Candice', qty: 1500,
+    payments: [
+      { id: 'p1', type: 'Restzahlung', date: '2026-03-30', amount: 6762.00 },
+      { id: 'p2', type: 'Zoll',        date: '2026-04-15', amount: 1000.00 },
+      { id: 'p3', type: 'EUSt',        date: '2026-04-15', amount: 2600.00 },
+      { id: 'p4', type: 'Transport',   date: '2026-04-25', amount: 1915.00 },
+    ]
+  },
+  {
+    id: 'PO20260003', product: 'P3 Kopfkissen Shredded', supplier: 'Candice', qty: 4500,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-01-09', amount: 8694.00 },
+      { id: 'p2', type: 'Zoll',        date: '2026-05-04', amount: 1134.00 },
+      { id: 'p3', type: 'EUSt',        date: '2026-05-04', amount: 5985.00 },
+      { id: 'p4', type: 'Restzahlung', date: '2026-05-04', amount: 20286.00 },
+      { id: 'p5', type: 'Transport',   date: '2026-06-10', amount: 2520.00 },
+    ]
+  },
+  {
+    id: 'PO20260010-K', product: 'P3 Kopfkissen Shredded', supplier: 'Candice', qty: 4005,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-04-20', amount: 6716.39 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-09-01', amount: 20149.16 },
+      { id: 'p3', type: 'Transport',   date: '2026-09-01', amount: 2242.80 },
+      { id: 'p4', type: 'Zoll',        date: '2026-09-01', amount: 1047.90 },
+      { id: 'p5', type: 'EUSt',        date: '2026-09-01', amount: 5530.58 },
+    ]
+  },
+  {
+    id: 'Best-5-Kopfkissen', product: 'P3 Kopfkissen Shredded', supplier: 'Candice', qty: 3600,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-09-01', amount: 5796.00 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-12-02', amount: 17388.00 },
+      { id: 'p3', type: 'Transport',   date: '2026-12-02', amount: 2016.00 },
+      { id: 'p4', type: 'Zoll',        date: '2026-12-02', amount: 907.20 },
+      { id: 'p5', type: 'EUSt',        date: '2026-12-02', amount: 4788.00 },
+    ]
+  },
+  {
+    id: 'PO20250011', product: 'P7 Lernturm', supplier: 'Vita', qty: 850,
+    payments: [
+      { id: 'p1', type: 'Restzahlung', date: '2026-03-20', amount: 22773.20 },
+      { id: 'p2', type: 'Transport',   date: '2026-04-01', amount: 4851.00 },
+    ]
+  },
+  {
+    id: 'PO20260004', product: 'P7 Lernturm', supplier: 'Vita', qty: 850,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-01-25', amount: 4018.80 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-07-01', amount: 22773.20 },
+      { id: 'p3', type: 'Transport',   date: '2026-07-01', amount: 4500.00 },
+    ]
+  },
+  {
+    id: 'PO20260008', product: 'P7 Lernturm', supplier: 'Vita', qty: 870,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-04-20', amount: 4113.36 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-11-04', amount: 23309.04 },
+      { id: 'p3', type: 'Transport',   date: '2026-11-04', amount: 4500.00 },
+    ]
+  },
+  {
+    id: 'PO20260010-L', product: 'P7 Lernturm (Zusatz)', supplier: 'Candice', qty: 512,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-04-20', amount: 715.52 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-09-01', amount: 2146.56 },
+    ]
+  },
+  {
+    id: 'Best-2-Lernturm', product: 'P7 Lernturm (Zusatz)', supplier: 'Candice', qty: 500,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-08-01', amount: 623.75 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-11-01', amount: 1871.25 },
+    ]
+  },
+  {
+    id: 'Best-3-Lernturm', product: 'P7 Lernturm (Zusatz)', supplier: 'Candice', qty: 500,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-11-01', amount: 623.75 },
+    ]
+  },
+  {
+    id: 'PO20260009', product: 'P11 Seitenschläferkissen', supplier: 'Candice', qty: 1500,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-04-20', amount: 4192.50 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-09-01', amount: 12577.50 },
+      { id: 'p3', type: 'Transport',   date: '2026-09-01', amount: 1830.00 },
+      { id: 'p4', type: 'Zoll',        date: '2026-09-01', amount: 669.60 },
+      { id: 'p5', type: 'EUSt',        date: '2026-09-01', amount: 3534.00 },
+    ]
+  },
+  {
+    id: 'Best-2-SSK', product: 'P11 Seitenschläferkissen', supplier: 'Candice', qty: 1500,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-08-01', amount: 3967.50 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-11-01', amount: 11902.50 },
+      { id: 'p3', type: 'Transport',   date: '2026-11-01', amount: 1830.00 },
+      { id: 'p4', type: 'Zoll',        date: '2026-11-01', amount: 637.20 },
+      { id: 'p5', type: 'EUSt',        date: '2026-11-01', amount: 3363.00 },
+    ]
+  },
+  {
+    id: 'Best-3-SSK', product: 'P11 Seitenschläferkissen', supplier: 'Candice', qty: 1500,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-11-01', amount: 3967.50 },
+    ]
+  },
+  {
+    id: 'PO20250008', product: 'P1 Babywanne', supplier: 'Taizhou', qty: 200,
+    payments: [
+      { id: 'p1', type: 'Restzahlung', date: '2026-01-11', amount: 803.60 },
+      { id: 'p2', type: 'Transport',   date: '2026-03-14', amount: 350.00 },
+      { id: 'p3', type: 'Zoll',        date: '2026-03-14', amount: 57.40 },
+      { id: 'p4', type: 'EUSt',        date: '2026-03-14', amount: 284.62 },
+    ]
+  },
+  {
+    id: 'PO20260006', product: 'P1 Babywanne', supplier: 'Taizhou', qty: 920,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-03-12', amount: 1504.20 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-06-05', amount: 3509.80 },
+      { id: 'p3', type: 'Transport',   date: '2026-07-10', amount: 1610.00 },
+      { id: 'p4', type: 'Zoll',        date: '2026-07-10', amount: 250.70 },
+      { id: 'p5', type: 'EUSt',        date: '2026-07-10', amount: 1258.56 },
+    ]
+  },
+  {
+    id: 'Best-6-Babywanne', product: 'P1 Babywanne', supplier: 'Taizhou', qty: 210,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-10-01', amount: 343.35 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-11-01', amount: 801.15 },
+    ]
+  },
+  {
+    id: 'Best-1-Saftpresse', product: 'P9 Saftpresse', supplier: 'SHUNJING', qty: 900,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-06-10', amount: 2950.88 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-07-20', amount: 8852.63 },
+      { id: 'p3', type: 'Transport',   date: '2026-09-18', amount: 1944.00 },
+      { id: 'p4', type: 'Zoll',        date: '2026-09-18', amount: 687.38 },
+      { id: 'p5', type: 'EUSt',        date: '2026-09-18', amount: 2612.03 },
+    ]
+  },
+  {
+    id: 'Best-2-Saftpresse', product: 'P9 Saftpresse', supplier: 'SHUNJING', qty: 900,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-09-01', amount: 2950.88 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-10-11', amount: 8852.63 },
+      { id: 'p3', type: 'Transport',   date: '2026-12-10', amount: 1944.00 },
+      { id: 'p4', type: 'Zoll',        date: '2026-12-10', amount: 687.38 },
+      { id: 'p5', type: 'EUSt',        date: '2026-12-10', amount: 2612.03 },
+    ]
+  },
+  {
+    id: 'PO20250007', product: 'P2 Krabbelmatte', supplier: 'Candice', qty: 2524,
+    payments: [
+      { id: 'p1', type: 'Transport',   date: '2026-01-31', amount: 4000.00 },
+      { id: 'p2', type: 'Zoll',        date: '2026-01-31', amount: 1221.69 },
+    ]
+  },
+  {
+    id: 'PO20250012', product: 'P2 Krabbelmatte', supplier: 'Candice', qty: 2488,
+    payments: [
+      { id: 'p1', type: 'Restzahlung', date: '2026-03-19', amount: 30303.84 },
+      { id: 'p2', type: 'Transport',   date: '2026-04-05', amount: 4800.00 },
+      { id: 'p3', type: 'Zoll',        date: '2026-04-05', amount: 1731.28 },
+    ]
+  },
+  {
+    id: 'PO20260005', product: 'P2 Krabbelmatte', supplier: 'Candice', qty: 2500,
+    payments: [
+      { id: 'p1', type: 'Anzahlung',   date: '2026-02-04', amount: 13050.00 },
+      { id: 'p2', type: 'Restzahlung', date: '2026-06-11', amount: 30450.00 },
+      { id: 'p3', type: 'Transport',   date: '2026-07-01', amount: 4500.00 },
+      { id: 'p4', type: 'Zoll',        date: '2026-07-01', amount: 1728.00 },
+    ]
+  },
+];
+
+// ── ONE-TIME PAYMENTS (Einmalige Ausgaben) ────────────────────────────────────
+let oneTime = [
+  { id: 'ppc_2026_01', date: '2026-01-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 14842.68 },
+  { id: 'wm_2026_02',  date: '2026-02-05', name: 'Nachzahlung WM Fulfillment 12/25', category: 'Verwaltungskosten', amount: 18368.73 },
+  { id: 'ppc_2026_02', date: '2026-02-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 25103.00 },
+  { id: 'ppc_2026_03', date: '2026-03-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 24334.39 },
+  { id: 'ppc_2026_04', date: '2026-04-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 23661.00 },
+  { id: 'ppc_2026_05', date: '2026-05-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 25874.55 },
+  { id: 'ppc_2026_06', date: '2026-06-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 19993.62 },
+  { id: 'ppc_2026_07', date: '2026-07-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 20931.04 },
+  { id: 'ppc_2026_08', date: '2026-08-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 20931.04 },
+  { id: 'ppc_2026_09', date: '2026-09-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 23593.17 },
+  { id: 'ppc_2026_10', date: '2026-10-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 28654.99 },
+  { id: 'oekotex_ret', date: '2026-11-01', name: 'Erstattung Ökotex Kissen',         category: 'Vertrieb & Marketing', amount: -2980.00 },
+  { id: 'ppc_2026_11', date: '2026-11-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 38150.77 },
+  { id: 'ppc_2026_12', date: '2026-12-15', name: 'PPC Abbuchung Amex',              category: 'PPC (Creditcard)',   amount: 40250.50 },
+  // Steuern kommen dynamisch aus dem Apps Script (steuern-Array)
+];
+
+// ── RECURRING PAYMENTS ────────────────────────────────────────────────────────
+let recurring = [
+  { id: 'allinkl',       name: 'ALL INKL',                      category: 'Tools & Software',   interval: 'monthly', amount: 8.00,     day: 18, startDate: '2023-12-18', endDate: null },
+  { id: 'sv_leben',      name: 'SV Lebensversicherung',          category: 'Versicherung',        interval: 'yearly',  amount: 35.17,    day: 1,  month: 12, startDate: '2023-12-01', endDate: null },
+  { id: 'commerzbank',   name: 'Commerzbank Kontoführung',       category: 'Tools & Software',   interval: 'monthly', amount: 34.90,    day: 29, startDate: '2023-12-29', endDate: null },
+  { id: 'buergschaft',   name: 'Bürgschaftsbank 1%',             category: 'Sonstiges',           interval: 'yearly',  amount: 1500.00,  day: 30, month: 3,  startDate: '2025-03-30', endDate: null },
+  { id: 'lager_wm',      name: 'Lagerkosten WM',                 category: 'Sonstiges',           interval: 'monthly', amount: 1200.00,  day: 1,  startDate: '2024-08-01', endDate: null },
+  { id: 'helium10',      name: 'Helium 10 (Amex)',               category: 'Tools & Software',   interval: 'monthly', amount: 82.15,    day: 15, startDate: '2024-09-15', endDate: null },
+  { id: 'sellerboard',   name: 'Sellerboard (Amex)',             category: 'Tools & Software',   interval: 'monthly', amount: 22.61,    day: 15, startDate: '2024-09-15', endDate: null },
+  { id: 'moritz_lohn',   name: 'Moritz Lohn',                    category: 'Personalkosten',      interval: 'monthly', amount: 450.00,   day: 30, startDate: '2025-06-30', endDate: null },
+  { id: 'tako_lohn',     name: 'Tako Lohn',                      category: 'Personalkosten',      interval: 'monthly', amount: 275.00,   day: 30, startDate: '2024-09-30', endDate: null },
+  { id: 'accountone',    name: 'AccountOne',                     category: 'Verwaltungskosten',   interval: 'monthly', amount: 119.00,   day: 30, startDate: '2024-11-30', endDate: null },
+  { id: 'amz_platform',  name: 'AMZ Plattformgebühr',            category: 'Tools & Software',   interval: 'monthly', amount: 50.00,    day: 30, startDate: '2025-01-30', endDate: null },
+  { id: 'otto_platform', name: 'Otto Plattformgebühr',           category: 'Tools & Software',   interval: 'monthly', amount: 100.00,   day: 30, startDate: '2025-01-30', endDate: null },
+  { id: 'allianz',       name: 'Allianz Betriebshaftpflicht',    category: 'Verwaltungskosten',   interval: 'yearly',  amount: 128.46,   day: 16, month: 12, startDate: '2024-12-16', endDate: null },
+  { id: 'noah_lohn',     name: 'Noah Lohn',                      category: 'Personalkosten',      interval: 'monthly', amount: 4000.00,  day: 1,  startDate: '2025-10-01', endDate: '2026-04-01' },
+  { id: 'stb_melanie',   name: 'Steuerberater Melanie',          category: 'Verwaltungskosten',   interval: 'monthly', amount: 300.00,   day: 30, startDate: '2025-12-01', endDate: null },
+  { id: 'noah_lohn_neu', name: 'Noah Lohn Neu',                  category: 'Personalkosten',      interval: 'monthly', amount: 1000.00,  day: 30, startDate: '2026-03-30', endDate: null },
+  { id: 'ungeplant',     name: 'Ungeplante Kosten (Samples etc.)', category: 'Sonstiges',         interval: 'monthly', amount: 2000.00,  day: 1,  startDate: '2026-04-01', endDate: null },
+];
+
+// ── STEUERN (wird dynamisch vom Apps Script geladen) ──────────────────────────
+let steuern = [];
+let einnahmen = null; // { label, values: [12] }
+
+// ── APPS SCRIPT KONFIGURATION ─────────────────────────────────────────────────
+// Nach dem Deployment des Apps Scripts die URL hier eintragen:
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzYtQrYl0b1Zt5WWVDLx1RIT__K5-wSdtcFXYTBTpDfdFIAjEeXCoWbndLTD0Jk6_UAsA/exec';
+const CACHE_KEY  = 'zd_data_v6';
+const CACHE_TS   = 'zd_data_ts';
+const CACHE_TTL  = 5 * 60 * 1000; // 5 Minuten
+
+async function loadData() {
+  if (SCRIPT_URL === 'APPS_SCRIPT_URL_HIER_EINTRAGEN') return; // noch nicht konfiguriert
+
+  const cached   = localStorage.getItem(CACHE_KEY);
+  const cachedTs = parseInt(localStorage.getItem(CACHE_TS) || '0');
+  if (cached && (Date.now() - cachedTs) < CACHE_TTL) {
+    applyData(JSON.parse(cached));
+    return;
+  }
+
+  setLoadingBadge(true);
+  try {
+    const resp = await fetch(SCRIPT_URL);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(CACHE_TS, String(Date.now()));
+    applyData(data);
+    const ts = data.lastUpdated ? new Date(data.lastUpdated) : new Date();
+    document.getElementById('lastUpdated').textContent =
+      'Aktualisiert ' + ts.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    console.warn('Daten konnten nicht geladen werden:', e);
+    if (cached) applyData(JSON.parse(cached));
+    document.getElementById('lastUpdated').textContent = '⚠ Offline-Cache';
+  } finally {
+    setLoadingBadge(false);
+  }
+}
+
+function applyData(data) {
+  if (data.orders)    orders    = data.orders;
+  if (data.oneTime)   oneTime   = data.oneTime;
+  if (data.recurring) recurring = data.recurring;
+  if (data.steuern)   steuern   = data.steuern;
+  if (data.einnahmen) einnahmen = data.einnahmen;
+  renderPayments();
+}
+
+function setLoadingBadge(on) {
+  const el = document.getElementById('syncBadge');
+  if (el) el.style.display = on ? 'inline' : 'none';
+}
+
+// Auto-Refresh alle 5 Minuten
+setInterval(loadData, CACHE_TTL);
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+const MONTHS_DE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+function fmtEur(n) {
+  const abs = Math.abs(n);
+  const s = abs.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  return n < 0 ? '+ ' + s : s;
+}
+function parseDate(str) { return str ? new Date(str + 'T00:00:00') : null; }
+
+function isActiveInMonth(r, year, month1) {
+  const start = parseDate(r.startDate);
+  const end = r.endDate ? parseDate(r.endDate) : null;
+  const mThis = new Date(year, month1 - 1, 1);
+  if (mThis < new Date(start.getFullYear(), start.getMonth(), 1)) return false;
+  if (end && mThis >= new Date(end.getFullYear(), end.getMonth(), 1)) return false;
+  return r.interval === 'yearly' ? r.month === month1 : true;
+}
+
+// ── STATE & STORAGE ───────────────────────────────────────────────────────────
+function storageKey(y, m) { return `paid_${y}_${m}`; }
+function getPaid(y, m) { try { return JSON.parse(localStorage.getItem(storageKey(y,m)) || '{}'); } catch { return {}; } }
+function setPaid(y, m, obj) { localStorage.setItem(storageKey(y,m), JSON.stringify(obj)); }
+
+function incomeKey(y, m) { return `inc_${y}_${m}`; }
+function getIncome(y, m) { try { return JSON.parse(localStorage.getItem(incomeKey(y,m)) || '[]'); } catch { return []; } }
+function setIncome(y, m, arr) { localStorage.setItem(incomeKey(y, m), JSON.stringify(arr)); }
+function addIncome(y, m, tx) {
+  const arr = getIncome(y, m);
+  if (!arr.find(t => t.desc === tx.desc && t.amount === tx.amount && t.dateStr === tx.dateStr)) {
+    arr.push(tx);
+    setIncome(y, m, arr);
+  }
+}
+
+const today = new Date();
+let curYear = Math.min(Math.max(today.getFullYear(), 2026), 2026);
+let curMonth = curYear === 2026 ? Math.min(Math.max(today.getMonth() + 1, 1), 12) : 1;
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function renderMonthSelect() {
+  const sel = document.getElementById('monthSelect');
+  sel.innerHTML = '';
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = MONTHS_DE[m-1] + ' ' + curYear;
+    if (m === curMonth) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function getOrderPaymentsForMonth(year, month1) {
+  // Returns: [{ order, payments: [payment] }]  — only payments in this month
+  const result = [];
+  for (const order of orders) {
+    const inMonth = order.payments.filter(p => {
+      const d = parseDate(p.date);
+      return d.getFullYear() === year && d.getMonth() + 1 === month1 && p.amount > 0;
+    });
+    if (inMonth.length) result.push({ order, payments: inMonth });
+  }
+  return result;
+}
+
+function getOtherPaymentsForMonth(year, month1) {
+  const result = [];
+  oneTime.forEach(p => {
+    const d = parseDate(p.date);
+    if (d.getFullYear() === year && d.getMonth() + 1 === month1) {
+      result.push({ id: p.id, name: p.name, category: p.category, amount: p.amount, day: d.getDate(), badge: 'once' });
+    }
+  });
+  recurring.forEach(r => {
+    if (isActiveInMonth(r, year, month1)) {
+      result.push({ id: `rec_${r.id}_${year}_${month1}`, name: r.name, category: r.category, amount: r.amount, day: r.day, badge: r.interval });
+    }
+  });
+  // Steuern dynamisch aus Apps Script (6 Zeilen, Monatswert für year/month1)
+  steuern.forEach(row => {
+    if (year !== 2026) return;
+    if (row.name.startsWith('Erw.')) return; // Kalkulationszeilen ausblenden
+    const val = row.values[month1 - 1];
+    if (val == null || val === 0) return;
+    const isIncome = row.name.includes('(+)');
+    const amount   = isIncome ? -Math.abs(val) : Math.abs(val);
+    result.push({
+      id:       `st_${row.key}_${year}_${String(month1).padStart(2,'0')}`,
+      name:     row.name,
+      category: 'Steuern',
+      amount:   amount,
+      day:      10,
+      badge:    'once'
+    });
+  });
+  result.sort((a, b) => a.day - b.day);
+  return result;
+}
+
+const CATEGORY_ORDER = ['PPC (Creditcard)', 'Personalkosten', 'Verwaltungskosten', 'Tools & Software', 'Sonstiges', 'Versicherung', 'Vertrieb & Marketing', 'Steuern'];
+
+function renderPayments() {
+  const paid = getPaid(curYear, curMonth);
+  const list = document.getElementById('paymentList');
+  list.innerHTML = '';
+
+  const orderGroups = getOrderPaymentsForMonth(curYear, curMonth);
+  const otherPayments = getOtherPaymentsForMonth(curYear, curMonth);
+
+  let total = 0, paidTotal = 0;
+
+  // Count totals
+  for (const { order, payments } of orderGroups) {
+    for (const p of payments) {
+      total += p.amount;
+      const pid = `order_${order.id}_${p.id || (p.type + '_' + p.date).replace(/[^a-z0-9]/gi,'_')}`;
+      if (paid[pid]) paidTotal += p.amount;
+    }
+  }
+  for (const p of otherPayments) {
+    total += p.amount;
+    if (paid[p.id]) paidTotal += p.amount;
+  }
+
+  updateSummary(total, paidTotal);
+
+  if (orderGroups.length === 0 && otherPayments.length === 0) {
+    list.innerHTML = '<div class="empty">Keine geplanten Zahlungen für diesen Monat.</div>';
+    return;
+  }
+
+  // ── Einnahmen-Karte ──
+  renderIncomeCard(list);
+
+  // ── Warenbestellungen section ──
+  if (orderGroups.length > 0) {
+    const orderTotal = orderGroups.reduce((s, { payments }) => s + payments.reduce((ss, p) => ss + p.amount, 0), 0);
+    const sec = document.createElement('div');
+    sec.className = 'cat-section';
+    const catHdr = document.createElement('div');
+    catHdr.className = 'cat-header';
+    catHdr.innerHTML = `<h2>Warenbestellungen</h2><span class="cat-total">${fmtEur(orderTotal)}</span>`;
+    sec.appendChild(catHdr);
+
+    for (const { order, payments } of orderGroups) {
+      const ordTotal = payments.reduce((s, p) => s + p.amount, 0);
+      const ordDiv = document.createElement('div');
+      ordDiv.className = 'order-section';
+
+      const ordHdr = document.createElement('div');
+      ordHdr.className = 'order-header';
+      ordHdr.innerHTML = `
+        <div>
+          <div class="order-name">${order.id} <span class="badge order">${order.product}</span></div>
+          <div class="order-meta">${order.supplier} · ${order.qty.toLocaleString('de-DE')} Stk</div>
+        </div>
+        <div class="order-total">${fmtEur(ordTotal)}</div>
+      `;
+      ordDiv.appendChild(ordHdr);
+
+      for (const p of payments) {
+        const pid = `order_${order.id}_${p.id || (p.type + '_' + p.date).replace(/[^a-z0-9]/gi,'_')}`;
+        const row = makePaymentRow(pid, `${p.type}`, `Fällig ${fmtDate(p.date)}`, p.amount, 'order', paid[pid], (checked) => {
+          const cur = getPaid(curYear, curMonth);
+          if (checked) cur[pid] = true; else delete cur[pid];
+          setPaid(curYear, curMonth, cur);
+          renderPayments();
+        });
+        ordDiv.appendChild(row);
+      }
+      sec.appendChild(ordDiv);
+    }
+    list.appendChild(sec);
+  }
+
+  // ── Other categories ──
+  const groups = {};
+  for (const p of otherPayments) {
+    (groups[p.category] = groups[p.category] || []).push(p);
+  }
+  const cats = Object.keys(groups).sort((a, b) => {
+    const ia = CATEGORY_ORDER.indexOf(a), ib = CATEGORY_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+
+  for (const cat of cats) {
+    const items = groups[cat];
+    const catTotal = items.reduce((s, p) => s + p.amount, 0);
+    const sec = document.createElement('div');
+    sec.className = 'cat-section';
+    const catHdr = document.createElement('div');
+    catHdr.className = 'cat-header';
+    catHdr.innerHTML = `<h2>${cat}</h2><span class="cat-total">${fmtEur(catTotal)}</span>`;
+    sec.appendChild(catHdr);
+
+    for (const p of items) {
+      const badgeLabel = p.badge === 'monthly' ? 'Monatlich' : p.badge === 'yearly' ? 'Jährlich' : 'Einmalig';
+      const row = makePaymentRow(p.id, `${p.name}<span class="badge ${p.badge}">${badgeLabel}</span>`,
+        `${MONTHS_DE[curMonth-1].slice(0,3)} ${String(p.day).padStart(2,'0')}, ${curYear}`,
+        p.amount, p.badge, paid[p.id], (checked) => {
+          const cur = getPaid(curYear, curMonth);
+          if (checked) cur[p.id] = true; else delete cur[p.id];
+          setPaid(curYear, curMonth, cur);
+          renderPayments();
+        });
+      sec.appendChild(row);
+    }
+    list.appendChild(sec);
+  }
+}
+
+function fmtDate(str) {
+  const d = parseDate(str);
+  return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+}
+
+function makePaymentRow(id, nameHtml, subText, amount, badge, isChecked, onChange) {
+  const row = document.createElement('div');
+  row.className = 'payment-row' + (isChecked ? ' paid-row' : '');
+  const isNeg = amount < 0;
+  row.innerHTML = `
+    <input type="checkbox" ${isChecked ? 'checked' : ''}>
+    <div class="info">
+      <div class="name">${nameHtml}</div>
+      <div class="sub">${subText}</div>
+    </div>
+    <div class="amt${isNeg ? ' negative' : ''}">${fmtEur(amount)}</div>
+  `;
+  row.querySelector('input').addEventListener('change', (e) => onChange(e.target.checked));
+  return row;
+}
+
+function updateSummary(total, paidTotal) {
+  document.getElementById('totalAmount').textContent = fmtEur(total);
+  document.getElementById('paidAmount').textContent = fmtEur(paidTotal);
+  document.getElementById('remainingAmount').textContent = fmtEur(total - paidTotal);
+}
+
+// ── EINNAHMEN-KARTE ───────────────────────────────────────────────────────────
+
+const INCOME_KEYWORDS = ['amazon', 'otto', 'shopify', 'stripe', 'paypal'];
+
+function isIncomeTransaction(tx) {
+  if (!tx.incoming) return false;
+  const d = norm(tx.desc);
+  return INCOME_KEYWORDS.some(k => d.includes(k));
+}
+
+function renderIncomeCard(container) {
+  const planned = einnahmen ? (einnahmen.values[curMonth - 1] || 0) : 0;
+  const received = getIncome(curYear, curMonth).reduce((s, t) => s + t.amount, 0);
+  const outstanding = planned - received;
+  const pct = planned > 0 ? Math.min(100, Math.round(received / planned * 100)) : 0;
+
+  const card = document.createElement('div');
+  card.className = 'income-card';
+  card.innerHTML = `
+    <div class="income-card-title">Einnahmen ${MONTHS_DE[curMonth-1]} ${curYear}</div>
+    <div class="income-rows">
+      <div class="income-row">
+        <span class="inc-label">Geplant</span>
+        <span class="inc-val">${fmtEur(planned)}</span>
+      </div>
+      <div class="income-bar-wrap"><div class="income-bar" style="width:${pct}%"></div></div>
+      <div class="income-row">
+        <span class="inc-label received">Eingegangen (${pct}%)</span>
+        <span class="inc-val received">${fmtEur(received)}</span>
+      </div>
+      <div class="income-row">
+        <span class="inc-label outstanding">Noch ausstehend</span>
+        <span class="inc-val outstanding">${fmtEur(Math.max(0, outstanding))}</span>
+      </div>
+    </div>
+    ${getIncome(curYear, curMonth).length > 0 ? `
+    <details class="income-details">
+      <summary>${getIncome(curYear, curMonth).length} Eingänge</summary>
+      ${getIncome(curYear, curMonth).map(t => `
+        <div class="income-tx">
+          <span>${t.dateStr} · ${t.desc.substring(0,50)}</span>
+          <span>${fmtEur(t.amount)}</span>
+        </div>`).join('')}
+    </details>` : ''}
+  `;
+  container.appendChild(card);
+}
+
+// ── CSV IMPORT ────────────────────────────────────────────────────────────────
+
+function parseGermanNum(s) {
+  if (!s) return NaN;
+  return parseFloat(s.trim().replace(/['"]/g,'').replace(/\./g,'').replace(',','.').replace(/[^\d.\-]/g,''));
+}
+function parseGermanDate(s) {
+  if (!s) return null;
+  s = s.replace(/['"]/g,'').trim();
+  const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if (!m) return null;
+  const y = m[3].length === 2 ? '20' + m[3] : m[3];
+  return new Date(`${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}T00:00:00`);
+}
+
+function parseBankCSV(text) {
+  const lines = text.split(/\r?\n/);
+  let headerIdx = -1, sep = ';';
+  for (let i = 0; i < Math.min(15, lines.length); i++) {
+    const l = lines[i].toLowerCase();
+    if (l.includes('buchungstag') || l.includes('datum') || l.includes('buchungsdatum') || l.includes('wertstellung')) {
+      headerIdx = i; sep = lines[i].includes(';') ? ';' : ','; break;
+    }
+  }
+  if (headerIdx < 0) return null;
+
+  function splitRow(line) {
+    const res = []; let inQ = false, cur = '';
+    for (const ch of line) {
+      if (ch === '"') inQ = !inQ;
+      else if (ch === sep && !inQ) { res.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    res.push(cur.trim()); return res;
+  }
+
+  const headers = splitRow(lines[headerIdx]).map(h => h.toLowerCase().replace(/['"]/g,'').trim());
+  const ci = (...names) => { for (const n of names) { const i = headers.findIndex(h => h.includes(n)); if (i >= 0) return i; } return -1; };
+  const dateCol = ci('buchungstag','buchungsdatum','datum','date','wertstellung');
+  const amtCol  = ci('betrag','amount','umsatz');
+  // Alle Text-Spalten sammeln für maximale Matching-Info
+  const textCols = [];
+  const textNames = ['buchungstext','verwendungszweck','beschreibung','auftraggeber',
+                     'beguenstigter','zahlungsempf','zahlungspflicht','glaeubiger',
+                     'gläubiger','empfänger','empfaenger','text','name','creditor'];
+  for (const n of textNames) {
+    const idx = ci(n);
+    if (idx >= 0 && !textCols.includes(idx)) textCols.push(idx);
+  }
+  if (dateCol < 0 || amtCol < 0) return null;
+
+  const txs = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const row = splitRow(lines[i]);
+    if (row.length <= Math.max(dateCol, amtCol)) continue;
+    const d   = parseGermanDate(row[dateCol]);
+    const amt = parseGermanNum(row[amtCol]);
+    if (!d || isNaN(amt) || amt === 0) continue;
+    // Alle verfügbaren Textspalten zusammenführen
+    const textParts = textCols.map(c => (row[c] || '').replace(/['"]/g,'').trim()).filter(Boolean);
+    // Fallback: alle nicht-Datum/Betrag-Spalten nehmen
+    if (textParts.length === 0) {
+      for (let c = 0; c < row.length; c++) {
+        if (c === dateCol || c === amtCol) continue;
+        const v = row[c].replace(/['"]/g,'').trim();
+        if (v && isNaN(parseGermanNum(v))) textParts.push(v);
+      }
+    }
+    // incoming=true für Eingänge (positiver Betrag), incoming=false für Ausgaben
+    txs.push({ date: d, amount: Math.abs(amt), incoming: amt > 0, desc: textParts.join(' ').trim() });
+  }
+  return txs;
+}
+
+// Keyword-Aliases: Was in der Bank als Buchungstext auftaucht
+const SUPPLIER_ALIASES = {
+  'Candice':   ['candice'],
+  'Taizhou':   ['taizhou'],
+  'Hangzou':   ['hangzou','hangzhou'],
+  'Vita':      ['vita'],
+  'Leone':     ['leone'],
+  'SHUNJING':  ['shunjing'],
+  'Yiwu':      ['yiwu'],
+  'James':     ['james'],
+};
+const CAT_ALIASES = {
+  'PPC (Creditcard)':   ['amex','american express','amazon ads','advertising','amazon payments','ppc'],
+  'Steuern':            ['finanzamt','bundeskasse','steuer','oss','bundeszentralamt'],
+  'Personalkosten':     ['lohn','gehalt','moritz','tako','noah'],
+  'Verwaltungskosten':  ['accountone','steuerberater','melanie','allianz','wm fulfillment','wm logistik'],
+  'Tools & Software':   ['all inkl','allinkl','commerzbank','helium','sellerboard','otto marktplatz','amazon seller'],
+  'Sonstiges':          ['buergschaft','bürgschaft','lagerkosten'],
+  'Versicherung':       ['allianz','sv leben','versicherung'],
+  'Vertrieb & Marketing': ['oekotex','ökotex'],
+};
+
+
+// Nur Zahlungen des aktuell angezeigten Monats
+function getCurrentMonthPayments() {
+  const y = curYear, m = curMonth;
+  const paid = getPaid(y, m);
+  const all  = [];
+
+  // Orders
+  for (const order of orders) {
+    for (const p of order.payments) {
+      const d = parseDate(p.date);
+      if (d.getFullYear() !== y || d.getMonth()+1 !== m || p.amount <= 0) continue;
+      const id = `order_${order.id}_${p.id || (p.type+'_'+p.date).replace(/[^a-z0-9]/gi,'_')}`;
+      if (paid[id]) continue;
+      const supplier = order.supplier || '';
+      const aliases  = SUPPLIER_ALIASES[supplier] || [supplier.toLowerCase().replace(/[^a-z0-9]/g,'')].filter(s=>s.length>=4);
+      // Bestellnummer (z.B. PO20260005) direkt als mustMatch — erscheint oft im Buchungstext
+      const orderIdNorm = order.id.toLowerCase().replace(/[^a-z0-9]/g,'');
+      if (orderIdNorm.length >= 4) aliases.push(orderIdNorm);
+      all.push({ id, date: p.date, amount: p.amount,
+        display: `${order.product} · ${p.type}`,
+        mustMatch: [...new Set(aliases)],
+        storageMonth: m });
+    }
+  }
+  // OneTime
+  for (const p of oneTime) {
+    const d = parseDate(p.date);
+    if (d.getFullYear() !== y || d.getMonth()+1 !== m || p.amount <= 0) continue;
+    if (paid[p.id]) continue;
+    all.push({ id: p.id, date: p.date, amount: p.amount,
+      display: p.name, category: p.category,
+      mustMatch: buildMustMatch(p.name, p.category),
+      storageMonth: m });
+  }
+  // Recurring
+  for (const r of recurring) {
+    if (!isActiveInMonth(r, y, m)) continue;
+    const id = `rec_${r.id}_${y}_${m}`;
+    if (paid[id]) continue;
+    const day  = String(Math.min(r.day,28)).padStart(2,'0');
+    const date = `${y}-${String(m).padStart(2,'0')}-${day}`;
+    all.push({ id, date, amount: r.amount,
+      display: r.name, category: r.category,
+      mustMatch: buildMustMatch(r.name, r.category),
+      storageMonth: m });
+  }
+  // Steuern
+  for (const row of steuern) {
+    const val = row.values[m-1];
+    const absVal = Math.abs(val);
+    if (!absVal || y !== 2026) continue;
+    const id = `st_${row.key}_${y}_${String(m).padStart(2,'0')}`;
+    if (paid[id]) continue;
+    const date = `${y}-${String(m).padStart(2,'0')}-10`;
+    // Für CSV-Matching immer positiven Betrag verwenden (Überweisung ist immer positiv)
+    all.push({ id, date, amount: absVal,
+      display: row.name, category: 'Steuern',
+      mustMatch: buildMustMatch(row.name, 'Steuern'),
+      storageMonth: m });
+  }
+  return all;
+}
+
+function norm(s) {
+  return (s || '').toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
+    .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+}
+
+// Kategorien mit variabler Abrechnung bekommen höhere Betragstoleranz
+const CAT_AMT_TOLERANCE = {
+  'PPC (Creditcard)': 0.80,  // Amex-Rechnung kann stark variieren
+};
+const DEFAULT_AMT_TOLERANCE = 0.35;
+
+// Baut die mustMatch-Liste: Aliase aus CAT_ALIASES + Namenswörter >= 5 Zeichen
+function buildMustMatch(name, category) {
+  const keywords = [];
+  if (CAT_ALIASES[category]) keywords.push(...CAT_ALIASES[category]);
+  // Namenswörter >= 5 Zeichen als zusätzliche Kandidaten
+  const nameWords = norm(name).split(' ').filter(w => w.length >= 5);
+  keywords.push(...nameWords);
+  return [...new Set(keywords)].filter(k => k.length >= 4);
+}
+
+function scoreMatch(tx, pay) {
+  if (!pay.mustMatch || pay.mustMatch.length === 0) return 0;
+  const txNorm = norm(tx.desc);
+
+  // ── 1. NAME-GATE: mindestens ein mustMatch-Begriff muss im Buchungstext vorkommen ──
+  const hit = pay.mustMatch.find(k => txNorm.includes(norm(k)));
+  if (!hit) return 0;
+
+  // ── 2. BETRAGS-GATE: Toleranz je nach Kategorie ──
+  const tolerance = CAT_AMT_TOLERANCE[pay.category] ?? DEFAULT_AMT_TOLERANCE;
+  const rel = Math.abs(tx.amount - pay.amount) / Math.max(tx.amount, pay.amount);
+  if (rel > tolerance) return 0;
+
+  // ── 3. SCORE berechnen ──
+  // Name-Score: mehr Hits = besser
+  const nameScore = Math.min(50, pay.mustMatch.filter(k => txNorm.includes(norm(k))).length * 20);
+  const amtScore  = Math.round((1 - rel / 0.35) * 35);
+  const dayDiff   = Math.abs((tx.date - parseDate(pay.date)) / 86400000);
+  const dateScore = dayDiff < 5 ? 15 : dayDiff < 15 ? 10 : dayDiff < 35 ? 5 : 0;
+
+  return nameScore + amtScore + dateScore;
+}
+
+function findMatches(txs, payments) {
+  const results = [];
+  const used = new Set();
+  for (const tx of txs) {
+    if (tx.incoming) continue; // Einnahmen nicht als Ausgaben matchen
+    let best = null, bestScore = 0;
+    for (const pay of payments) {
+      if (used.has(pay.id)) continue;
+      const sc = scoreMatch(tx, pay);
+      if (sc > bestScore) { bestScore = sc; best = pay; }
+    }
+    if (best && bestScore >= 20) {
+      results.push({ tx, pay: best, score: bestScore });
+      used.add(best.id);
+    } else {
+      results.push({ tx, pay: null, score: 0 });
+    }
+  }
+  return results;
+}
+
+function confLabel(score) {
+  if (score >= 65) return ['Hoch',    'conf-high'];
+  if (score >= 40) return ['Mittel',  'conf-med'];
+  return              ['Niedrig', 'conf-low'];
+}
+
+let _importMatches = []; // globale Variable statt JSON in onclick
+
+function showImportModal(matches, newIncome = 0) {
+  _importMatches = matches;
+  const hasMatch = matches.filter(m => m.pay);
+  const noMatch  = matches.filter(m => !m.pay);
+
+  const container = document.getElementById('modalContainer');
+  container.innerHTML = `
+  <div class="modal-overlay" id="csvModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>📥 ${MONTHS_DE[curMonth-1]} ${curYear} — ${hasMatch.length} Treffer${newIncome > 0 ? ` · ${newIncome} Einnahmen erkannt` : ''}</h2>
+        <button class="close-btn" id="csvClose">✕</button>
+      </div>
+      <div class="modal-body">
+        ${hasMatch.length === 0 ? '<p style="color:#aaa;font-size:0.88rem;padding:12px 0">Keine passenden Zahlungen für diesen Monat gefunden.</p>' : ''}
+        ${matches.map((m, idx) => {
+          if (!m.pay) return '';
+          const [label, cls] = confLabel(m.score);
+          const amtDiff = ((m.tx.amount - m.pay.amount) / m.pay.amount * 100).toFixed(1);
+          const sign = amtDiff >= 0 ? '+' : '';
+          return `
+          <div class="match-row confirmed" id="mr_${idx}">
+            <input type="checkbox" checked id="mc_${idx}">
+            <div class="match-info">
+              <div class="match-bank">${m.tx.date.toLocaleDateString('de-DE')} · ${m.tx.amount.toLocaleString('de-DE',{minimumFractionDigits:2})} € — ${m.tx.desc.substring(0,80)}</div>
+              <div class="match-pay">${m.pay.display}</div>
+              <div class="match-sub">Plan: ${Math.abs(m.pay.amount).toLocaleString('de-DE',{minimumFractionDigits:2})} € · Abweichung: ${sign}${amtDiff}% · ${new Date(m.pay.date+'T00:00:00').toLocaleDateString('de-DE')}</div>
+            </div>
+            <span class="conf-pill ${cls}">${label}</span>
+          </div>`;
+        }).join('')}
+        ${noMatch.length > 0 ? `<p style="margin-top:16px;font-size:0.78rem;color:#aaa;font-weight:600">${noMatch.length} Buchungen ohne Treffer (im ${MONTHS_DE[curMonth-1]}):</p>` : ''}
+        ${noMatch.map(m => `
+          <div class="no-match-row">${m.tx.date.toLocaleDateString('de-DE')} · ${m.tx.amount.toLocaleString('de-DE',{minimumFractionDigits:2})} € — ${m.tx.desc.substring(0,70)}</div>
+        `).join('')}
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" id="csvCancel">Abbrechen</button>
+        <button class="btn-confirm" id="csvApply">Ausgewählte abhaken</button>
+      </div>
+    </div>
+  </div>`;
+
+  document.getElementById('csvClose').onclick  = () => document.getElementById('csvModal').remove();
+  document.getElementById('csvCancel').onclick = () => document.getElementById('csvModal').remove();
+  document.getElementById('csvApply').onclick  = applyImport;
+
+  // Checkbox-Styling — idx bezieht sich auf matches (volles Array)
+  matches.forEach((m, idx) => {
+    if (!m.pay) return;
+    document.getElementById(`mc_${idx}`).addEventListener('change', function() {
+      document.getElementById(`mr_${idx}`).className = 'match-row ' + (this.checked ? 'confirmed' : 'skipped');
+    });
+  });
+}
+
+function applyImport() {
+  _importMatches.forEach((m, idx) => {
+    if (!m.pay) return;
+    const cb = document.getElementById(`mc_${idx}`);
+    if (!cb || !cb.checked) return;
+    const cur = getPaid(curYear, m.pay.storageMonth);
+    cur[m.pay.id] = true;
+    setPaid(curYear, m.pay.storageMonth, cur);
+  });
+  document.getElementById('csvModal')?.remove();
+  renderPayments();
+}
+
+document.getElementById('csvBtn').addEventListener('click', () => document.getElementById('csvFile').click());
+document.getElementById('csvFile').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const txs = parseBankCSV(ev.target.result);
+    if (!txs || txs.length === 0) {
+      alert('CSV konnte nicht gelesen werden. Bitte prüfe das Format (Commerzbank/DKB/Sparkasse CSV).');
+      return;
+    }
+    // Einnahmen automatisch erkennen und speichern (kein Modal nötig)
+    let newIncome = 0;
+    for (const tx of txs) {
+      if (!isIncomeTransaction(tx)) continue;
+      const d = tx.date;
+      const txMonth = d.getMonth() + 1;
+      const txYear  = d.getFullYear();
+      if (txYear !== curYear || txMonth !== curMonth) continue;
+      const dateStr = `${txYear}-${String(txMonth).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      addIncome(txYear, txMonth, { dateStr, desc: tx.desc, amount: tx.amount });
+      newIncome++;
+    }
+    const payments = getCurrentMonthPayments();
+    const matches  = findMatches(txs, payments);
+    showImportModal(matches, newIncome);
+    e.target.value = '';
+  };
+  reader.readAsText(file, 'ISO-8859-1');
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+renderMonthSelect();
+renderPayments();   // sofort mit hardcodierten Fallback-Daten
+loadData();         // dann frische Daten vom Apps Script laden
+
+document.getElementById('monthSelect').addEventListener('change', (e) => { curMonth = +e.target.value; renderPayments(); });
+document.getElementById('prevBtn').addEventListener('click', () => { if (curMonth > 1) { curMonth--; renderMonthSelect(); renderPayments(); } });
+document.getElementById('nextBtn').addEventListener('click', () => { if (curMonth < 12) { curMonth++; renderMonthSelect(); renderPayments(); } });
+</script>
+</body>
+</html>
