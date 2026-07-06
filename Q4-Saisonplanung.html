@@ -173,7 +173,7 @@ function etaToMonthIdx(etaStr) {
 function extractProducts(csvText) {
   const rows=csvText.split('\n').map(parseCSVLine);
   const result=[];
-  const COL={name:0,stock:1,vk:2,po1nr:13,po1qty:14,po1eta:15,po2nr:16,po2qty:17,po2eta:18};
+  const COL={name:0,stock:1,vk:2,po1nr:14,po1qty:15,po1eta:16,po2nr:17,po2qty:18,po2eta:19};
 
   for(const def of PRODUCT_DEFS){
     const row=rows.find(r=>r[COL.name]&&r[COL.name].trim()===def.keyword);
