@@ -129,9 +129,19 @@ const PRODUCT_DEFS = [
   { id:"babywanne",    label:"Babywanne",         keyword:"Babywanne Parent",   deliveryDays:100, vpe:8 },
 ];
 
+const MULT_STORAGE_KEY = "q4planung_multipliers";
+
 let products    = [];
-let multipliers = {};
+let multipliers = loadStoredMults();
 let activeId    = "krabbelmatte";
+
+function loadStoredMults() {
+  try{ return JSON.parse(localStorage.getItem(MULT_STORAGE_KEY)) || {}; }
+  catch(e){ return {}; }
+}
+function saveStoredMults() {
+  localStorage.setItem(MULT_STORAGE_KEY, JSON.stringify(multipliers));
+}
 
 function parseCSVLine(line) {
   const result=[]; let cur=""; let inQ=false;
@@ -173,7 +183,7 @@ function etaToMonthIdx(etaStr) {
 function extractProducts(csvText) {
   const rows=csvText.split('\n').map(parseCSVLine);
   const result=[];
-  const COL={name:0,stock:1,vk:2,po1nr:14,po1qty:15,po1eta:16,po2nr:17,po2qty:18,po2eta:19};
+  const COL={name:0,stock:1,vk:2,po1nr:14,po1qty:15,po1eta:16,po2nr:17,po2qty:18,po2eta:19,deliveryDays:34,vpe:35};
 
   for(const def of PRODUCT_DEFS){
     const row=rows.find(r=>r[COL.name]&&r[COL.name].trim()===def.keyword);
@@ -183,13 +193,15 @@ function extractProducts(csvText) {
     const po2qty=parseNum(row[COL.po2qty]);
     const po1eta=row[COL.po1eta]?.trim()||null;
     const po2eta=row[COL.po2eta]?.trim()||null;
+    const sheetDeliveryDays=parseNum(row[COL.deliveryDays]);
+    const sheetVpe=parseNum(row[COL.vpe]);
 
     result.push({
       id:def.id, label:def.label,
       currentStock:parseNum(row[COL.stock]),
       baseVK:parseNum(row[COL.vk]),
-      deliveryDays:def.deliveryDays,
-      vpe:def.vpe,
+      deliveryDays:sheetDeliveryDays>0?sheetDeliveryDays:def.deliveryDays,
+      vpe:sheetVpe>0?sheetVpe:def.vpe,
       po1:po1qty>0?{nr:row[COL.po1nr]?.trim()||"PO1",qty:po1qty,eta:po1eta,monthIdx:etaToMonthIdx(po1eta)}:null,
       po2:po2qty>0?{nr:row[COL.po2nr]?.trim()||"PO2",qty:po2qty,eta:po2eta,monthIdx:etaToMonthIdx(po2eta)}:null,
     });
@@ -441,8 +453,8 @@ function render() {
 }
 
 function setActive(id){activeId=id;render();}
-function updateMult(productId,mk,val){const v=parseFloat(val);if(isNaN(v)||v<=0)return;multipliers[productId][mk]=v;render();}
-function resetMults(productId){multipliers[productId]={...DEFAULT_MULTS[productId]};render();}
+function updateMult(productId,mk,val){const v=parseFloat(val);if(isNaN(v)||v<=0)return;multipliers[productId][mk]=v;saveStoredMults();render();}
+function resetMults(productId){multipliers[productId]={...DEFAULT_MULTS[productId]};saveStoredMults();render();}
 
 loadData();
 </script>
