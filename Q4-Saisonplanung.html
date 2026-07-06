@@ -162,7 +162,7 @@ function parseDate(s) {
 
 function etaToMonthIdx(etaStr) {
   const d=parseDate(etaStr);
-  if(!d) return null;
+  if(!d) return 0; // fehlendes/unlesbares ETA → als sofort fällig (Juli) werten
   const base=new Date("2026-07-01");
   const diff=(d.getFullYear()-base.getFullYear())*12+(d.getMonth()-base.getMonth());
   if(diff<0) return 0;   // past → treat as July
