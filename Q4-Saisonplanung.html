@@ -81,6 +81,7 @@
   .error-msg { background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:16px 20px; color:#fca5a5; font-size:13px; margin:20px 0; }
   .footer-note { font-size:10px; color:var(--dim); text-align:center; margin-top:10px; font-family:var(--mono); }
   .divider-row td { background:var(--bg) !important; padding:4px 16px; font-size:9px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-family:'Inter',sans-serif; }
+  .past-row td { opacity:0.5; font-family:var(--mono); }
 </style>
 </head>
 <body>
@@ -113,7 +114,20 @@ const MONTH_DATES = [
   new Date("2027-01-01"), new Date("2027-02-01"), new Date("2027-03-01"),
 ];
 // Q4 = indices 3,4,5 | Q1-2027 = indices 6,7,8
-const TODAY = new Date("2026-06-23");
+const _now = new Date();
+const TODAY = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate());
+
+function monthDiffFromWindowStart(d) {
+  const base=new Date("2026-07-01");
+  return (d.getFullYear()-base.getFullYear())*12+(d.getMonth()-base.getMonth());
+}
+const TODAY_RAW_DIFF   = monthDiffFromWindowStart(TODAY);
+const TODAY_MONTH_IDX  = Math.max(0,Math.min(8,TODAY_RAW_DIFF));
+// Only treat the month as "partial" if today actually falls inside the Jul26–Mär27 window;
+// outside that window there's no real "today" to anchor to, so fall back to a full month.
+const DAYS_REMAINING_IN_MONTH = (TODAY_RAW_DIFF>=0 && TODAY_RAW_DIFF<=8)
+  ? Math.max(1, 30-(TODAY.getDate()-1))
+  : 30;
 
 const DEFAULT_MULTS = {
   krabbelmatte:{ jul:1.0, aug:1.0, sep:1.0, okt:1.2, nov:1.7, dez:2.0, jan:0.8, feb:0.7, mar:0.7 },
@@ -129,30 +143,57 @@ const PRODUCT_DEFS = [
   { id:"babywanne",    label:"Babywanne",         keyword:"Babywanne Parent",   deliveryDays:100, vpe:8 },
 ];
 
-const MULT_STORAGE_KEY = "q4planung_multipliers";
+const MULT_STORAGE_KEY = "q4Saisonplanung.multipliers";
+
+function loadStoredMults() {
+  try{
+    const raw=localStorage.getItem(MULT_STORAGE_KEY);
+    return raw?JSON.parse(raw):{};
+  }catch(e){
+    return {};
+  }
+}
+
+function saveMults() {
+  try{
+    localStorage.setItem(MULT_STORAGE_KEY,JSON.stringify(multipliers));
+  }catch(e){
+    console.warn("Konnte Multiplikatoren nicht speichern:",e);
+  }
+}
 
 let products    = [];
 let multipliers = loadStoredMults();
 let activeId    = "krabbelmatte";
 
-function loadStoredMults() {
-  try{ return JSON.parse(localStorage.getItem(MULT_STORAGE_KEY)) || {}; }
-  catch(e){ return {}; }
-}
-function saveStoredMults() {
-  localStorage.setItem(MULT_STORAGE_KEY, JSON.stringify(multipliers));
-}
-
-function parseCSVLine(line) {
-  const result=[]; let cur=""; let inQ=false;
-  for(let i=0;i<line.length;i++){
-    const c=line[i];
-    if(c==='"'){inQ=!inQ;}
-    else if(c===','&&!inQ){result.push(cur.trim());cur="";}
-    else{cur+=c;}
+function parseCSV(text) {
+  // Full-text CSV parser (handles quoted fields containing commas AND line breaks,
+  // unlike a naive split('\n') which misaligns every fixed-index column after
+  // any cell with an embedded newline).
+  const rows=[]; let row=[]; let field=""; let inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){
+        if(text[i+1]==='"'){field+='"';i++;}
+        else{inQ=false;}
+      } else {
+        field+=c;
+      }
+    } else {
+      if(c==='"'){inQ=true;}
+      else if(c===','){row.push(field.trim());field="";}
+      else if(c==='\n'||c==='\r'){
+        if(c==='\r'&&text[i+1]==='\n') i++;
+        row.push(field.trim());field="";
+        rows.push(row);row=[];
+      } else {
+        field+=c;
+      }
+    }
   }
-  result.push(cur.trim());
-  return result;
+  if(field.length>0||row.length>0){row.push(field.trim());rows.push(row);}
+  return rows;
 }
 
 function parseNum(s) {
@@ -161,29 +202,46 @@ function parseNum(s) {
 }
 
 function parseDate(s) {
-  if(!s||s.length<8) return null;
-  const parts=s.split('.');
-  if(parts.length===3){
-    const d=new Date(`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`);
+  if(!s) return null;
+  s=String(s).replace(/"/g,'').trim();
+  if(s.length<6) return null;
+
+  const toDate=(yyyy,mm,dd)=>{
+    if(yyyy.length===2) yyyy=(parseInt(yyyy,10)<70?"20":"19")+yyyy;
+    const d=new Date(`${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`);
     return isNaN(d)?null:d;
+  };
+
+  let m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/); // DD.MM.YYYY / DD.MM.YY
+  if(m) return toDate(m[3],m[2],m[1]);
+
+  m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); // YYYY-MM-DD (ISO)
+  if(m) return toDate(m[1],m[2],m[3]);
+
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/); // DD/MM/YYYY or MM/DD/YYYY
+  if(m){
+    const [,a,b,yyyy]=m;
+    const dd=parseInt(a,10)>12?a:b;
+    const mm=parseInt(a,10)>12?b:a;
+    return toDate(yyyy,mm,dd);
   }
+
   return null;
 }
 
 function etaToMonthIdx(etaStr) {
   const d=parseDate(etaStr);
-  if(!d) return 0; // fehlendes/unlesbares ETA → als sofort fällig (Juli) werten
-  const base=new Date("2026-07-01");
-  const diff=(d.getFullYear()-base.getFullYear())*12+(d.getMonth()-base.getMonth());
-  if(diff<0) return 0;   // past → treat as July
+  if(!d) return null;
+  const diff=monthDiffFromWindowStart(d);
   if(diff>8) return null; // after March 2027 → ignore
+  if(diff<TODAY_MONTH_IDX) return TODAY_MONTH_IDX; // overdue but still pending → treat as arriving now
   return diff;
 }
 
 function extractProducts(csvText) {
-  const rows=csvText.split('\n').map(parseCSVLine);
+  const rows=parseCSV(csvText);
   const result=[];
-  const COL={name:0,stock:1,vk:2,po1nr:14,po1qty:15,po1eta:16,po2nr:17,po2qty:18,po2eta:19,deliveryDays:34,vpe:35};
+  const COL={name:0,stock:1,vk:2,po1nr:13,po1qty:14,po1eta:15,po2nr:16,po2qty:17,po2eta:18};
 
   for(const def of PRODUCT_DEFS){
     const row=rows.find(r=>r[COL.name]&&r[COL.name].trim()===def.keyword);
@@ -193,15 +251,13 @@ function extractProducts(csvText) {
     const po2qty=parseNum(row[COL.po2qty]);
     const po1eta=row[COL.po1eta]?.trim()||null;
     const po2eta=row[COL.po2eta]?.trim()||null;
-    const sheetDeliveryDays=parseNum(row[COL.deliveryDays]);
-    const sheetVpe=parseNum(row[COL.vpe]);
 
     result.push({
       id:def.id, label:def.label,
       currentStock:parseNum(row[COL.stock]),
       baseVK:parseNum(row[COL.vk]),
-      deliveryDays:sheetDeliveryDays>0?sheetDeliveryDays:def.deliveryDays,
-      vpe:sheetVpe>0?sheetVpe:def.vpe,
+      deliveryDays:def.deliveryDays,
+      vpe:def.vpe,
       po1:po1qty>0?{nr:row[COL.po1nr]?.trim()||"PO1",qty:po1qty,eta:po1eta,monthIdx:etaToMonthIdx(po1eta)}:null,
       po2:po2qty>0?{nr:row[COL.po2nr]?.trim()||"PO2",qty:po2qty,eta:po2eta,monthIdx:etaToMonthIdx(po2eta)}:null,
     });
@@ -213,13 +269,18 @@ function calcFlow(p,mults) {
   let stock=p.currentStock;
   return MONTH_KEYS.map((mk,i)=>{
     const mult=mults[mk]??1.0;
-    const sold=Math.round(p.baseVK*mult*30);
+    if(i<TODAY_MONTH_IDX){
+      // Already elapsed — currentStock already reflects this, don't subtract it again.
+      return {month:MONTHS[i],mk,mult,sold:0,inbound:0,start:null,end:null,oos:false,days:0,past:true};
+    }
+    const days=i===TODAY_MONTH_IDX?DAYS_REMAINING_IN_MONTH:30;
+    const sold=Math.round(p.baseVK*mult*days);
     const start=stock;
     let inbound=0;
     if(p.po1&&p.po1.monthIdx===i) inbound+=p.po1.qty;
     if(p.po2&&p.po2.monthIdx===i) inbound+=p.po2.qty;
     stock=stock+inbound-sold;
-    return {month:MONTHS[i],mk,mult,sold,inbound,start,end:stock,oos:stock<0};
+    return {month:MONTHS[i],mk,mult,sold,inbound,start,end:stock,oos:stock<0,days,past:false};
   });
 }
 
@@ -236,10 +297,11 @@ function calcRec(p,mults) {
   let deficit,arrivalBy,reason,firstOOSMonth=null;
   if(firstOOSIdx!==-1){
     const row=rows[firstOOSIdx];
-    const dailyRate=row.sold/30;
-    const daysLeft=dailyRate>0?Math.floor(row.start/dailyRate):30;
-    arrivalBy=addDays(MONTH_DATES[firstOOSIdx],Math.max(0,daysLeft));
-    deficit=Math.abs(Math.min(...rows.map(r=>r.end)));
+    const dailyRate=row.days>0?row.sold/row.days:0;
+    const daysLeft=dailyRate>0?Math.floor(row.start/dailyRate):row.days;
+    const anchor=firstOOSIdx===TODAY_MONTH_IDX?TODAY:MONTH_DATES[firstOOSIdx];
+    arrivalBy=addDays(anchor,Math.max(0,daysLeft));
+    deficit=Math.abs(Math.min(...rows.filter(r=>!r.past).map(r=>r.end)));
     reason="oos";
     firstOOSMonth=MONTHS[firstOOSIdx];
   } else {
@@ -274,6 +336,7 @@ async function loadData() {
     for(const p of products){
       if(!multipliers[p.id]) multipliers[p.id]={...DEFAULT_MULTS[p.id]};
     }
+    saveMults();
     document.getElementById("lastSync").textContent="Sync: "+new Date().toLocaleTimeString("de-DE");
     document.getElementById("loadingDiv").style.display="none";
     document.getElementById("appDiv").style.display="block";
@@ -296,7 +359,7 @@ function render() {
   const hasOOS=rows.some(r=>r.oos);
 
   const q4Sold  =rows.slice(3,6).reduce((s,r)=>s+r.sold,0);
-  const q4Normal=rows.slice(3,6).reduce((s,r)=>s+Math.round(p.baseVK*30),0);
+  const q4Normal=rows.slice(3,6).reduce((s,r)=>s+Math.round(p.baseVK*r.days),0);
   const q4Extra =q4Sold-q4Normal;
 
   // Global dot
@@ -311,7 +374,7 @@ function render() {
     const etaD=parseDate(p.po1.eta);
     const late=etaD&&isPast(etaD);
     poCells+=`<div class="info-cell">
-      <div class="info-label">${p.po1.nr}${late?'<span class="badge badge-late">verspätet→Jul</span>':''}</div>
+      <div class="info-label">${p.po1.nr}${late?`<span class="badge badge-late">verspätet→${MONTHS[TODAY_MONTH_IDX]}</span>`:''}</div>
       <div class="info-value green">+${p.po1.qty.toLocaleString("de-DE")} · ${p.po1.eta||"—"}</div>
     </div>`;
   }
@@ -319,25 +382,38 @@ function render() {
     const etaD=parseDate(p.po2.eta);
     const late=etaD&&isPast(etaD);
     poCells+=`<div class="info-cell">
-      <div class="info-label">${p.po2.nr}${late?'<span class="badge badge-late">verspätet→Jul</span>':''}</div>
+      <div class="info-label">${p.po2.nr}${late?`<span class="badge badge-late">verspätet→${MONTHS[TODAY_MONTH_IDX]}</span>`:''}</div>
       <div class="info-value green">+${p.po2.qty.toLocaleString("de-DE")} · ${p.po2.eta||"—"}</div>
     </div>`;
   }
 
   // Table rows with divider between Q4 and Q1
   const tableRows=rows.map((row,i)=>{
-    const multColor=row.mult>1.5?"var(--orange)":row.mult>1.0?"var(--yellow)":"var(--muted)";
-    const multBg=row.mult>1.5?"rgba(249,115,22,0.12)":row.mult>1.0?"rgba(245,158,11,0.12)":"transparent";
-    const endColor=row.oos?"var(--red)":row.end<p.baseVK*30?"var(--orange)":"var(--green)";
-    const oosBadge=row.oos?`<span class="badge badge-oos">OOS</span>`:"";
     const periodBadge=i>=6?`<span class="badge badge-q1">Q1 '27</span>`:i>=3?`<span class="badge badge-q4">Q4</span>`:"";
     const isQ1=i>=6;
 
     let divider="";
     if(i===6) divider=`<tr class="divider-row"><td colspan="6">── Q1 2027 ──────────────────────────────</td></tr>`;
 
+    if(row.past){
+      return divider+`<tr class="past-row${isQ1?' q1-row':''}">
+        <td style="color:var(--dim);font-weight:600;font-family:'Inter',sans-serif">${row.month}${periodBadge}</td>
+        <td style="color:var(--dim)">—</td>
+        <td style="color:var(--dim)">—</td>
+        <td class="neutral-cell">—</td>
+        <td style="color:var(--dim)">—</td>
+        <td style="color:var(--dim)">vergangen</td>
+      </tr>`;
+    }
+
+    const multColor=row.mult>1.5?"var(--orange)":row.mult>1.0?"var(--yellow)":"var(--muted)";
+    const multBg=row.mult>1.5?"rgba(249,115,22,0.12)":row.mult>1.0?"rgba(245,158,11,0.12)":"transparent";
+    const endColor=row.oos?"var(--red)":row.end<p.baseVK*30?"var(--orange)":"var(--green)";
+    const oosBadge=row.oos?`<span class="badge badge-oos">OOS</span>`:"";
+    const todayBadge=i===TODAY_MONTH_IDX?`<span class="badge" style="background:rgba(59,130,246,0.15);color:#93c5fd">Heute</span>`:"";
+
     return divider+`<tr class="${row.oos?'oos-row':''}${isQ1?' q1-row':''}">
-      <td style="color:#f1f5f9;font-weight:600;font-family:'Inter',sans-serif">${row.month}${periodBadge}</td>
+      <td style="color:#f1f5f9;font-weight:600;font-family:'Inter',sans-serif">${row.month}${periodBadge}${todayBadge}</td>
       <td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;font-size:13px;color:${multColor};background:${multBg}">×${row.mult.toFixed(1)}</span></td>
       <td style="color:var(--text)">${row.sold.toLocaleString("de-DE")}</td>
       <td class="${row.inbound>0?'inbound-cell':'neutral-cell'}">${row.inbound>0?'+'+row.inbound.toLocaleString("de-DE"):'—'}</td>
@@ -448,13 +524,13 @@ function render() {
       </table>
     </div>
     ${recHTML}
-    <div class="footer-note">Jul 2026 – Mär 2027 · Alle POs ausstehend · ETAs in der Vergangenheit → Juli-Zugang · VK/Tag × Mult × 30 = monatlicher Abverkauf</div>
+    <div class="footer-note">Jul 2026 – Mär 2027 · Alle POs ausstehend · Überfällige ETAs → Zugang im aktuellen Monat · Start = heutiger Bestand ab ${MONTHS[TODAY_MONTH_IDX]} · VK/Tag × Mult × Tage = Abverkauf</div>
   `;
 }
 
 function setActive(id){activeId=id;render();}
-function updateMult(productId,mk,val){const v=parseFloat(val);if(isNaN(v)||v<=0)return;multipliers[productId][mk]=v;saveStoredMults();render();}
-function resetMults(productId){multipliers[productId]={...DEFAULT_MULTS[productId]};saveStoredMults();render();}
+function updateMult(productId,mk,val){const v=parseFloat(val);if(isNaN(v)||v<=0)return;multipliers[productId][mk]=v;saveMults();render();}
+function resetMults(productId){multipliers[productId]={...DEFAULT_MULTS[productId]};saveMults();render();}
 
 loadData();
 </script>
