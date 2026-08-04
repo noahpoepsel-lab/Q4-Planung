@@ -230,7 +230,7 @@ function extractProducts(csvText) {
   // Sheet has an "OOS" date column at index 13 (between "Menge Kartons" and
   // "Bestellnummer 1") that wasn't previously accounted for — PO columns
   // start one index later than the old mapping assumed.
-  const COL={name:0,stock:1,vk:2,po1nr:14,po1qty:15,po1eta:16,po2nr:17,po2qty:18,po2eta:19};
+  const COL={name:0,stock:1,vk:2,po1nr:14,po1qty:15,po1eta:16,po2nr:17,po2qty:18,po2eta:19,deliveryDays:34,vpe:35};
 
   for(const def of PRODUCT_DEFS){
     const row=rows.find(r=>r[COL.name]&&r[COL.name].trim()===def.keyword);
@@ -240,13 +240,17 @@ function extractProducts(csvText) {
     const po2qty=parseNum(row[COL.po2qty]);
     const po1eta=row[COL.po1eta]?.trim()||null;
     const po2eta=row[COL.po2eta]?.trim()||null;
+    // Prefer the sheet's live "Delivery Time"/"VPE" columns; fall back to the
+    // hardcoded defaults only if the sheet cell is empty/unparseable.
+    const sheetDeliveryDays=parseNum(row[COL.deliveryDays]);
+    const sheetVpe=parseNum(row[COL.vpe]);
 
     result.push({
       id:def.id, label:def.label,
       currentStock:parseNum(row[COL.stock]),
       baseVK:parseNum(row[COL.vk]),
-      deliveryDays:def.deliveryDays,
-      vpe:def.vpe,
+      deliveryDays:sheetDeliveryDays>0?sheetDeliveryDays:def.deliveryDays,
+      vpe:sheetVpe>0?sheetVpe:def.vpe,
       po1:po1qty>0?{nr:row[COL.po1nr]?.trim()||"PO1",qty:po1qty,eta:po1eta,monthIdx:etaToMonthIdx(po1eta)}:null,
       po2:po2qty>0?{nr:row[COL.po2nr]?.trim()||"PO2",qty:po2qty,eta:po2eta,monthIdx:etaToMonthIdx(po2eta)}:null,
     });
