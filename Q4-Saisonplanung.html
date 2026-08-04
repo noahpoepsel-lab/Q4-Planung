@@ -273,21 +273,26 @@ function calcFlow(p,mults) {
   });
 }
 
-// Finds when stock first drops below the safety buffer (not just below zero),
-// so incoming orders are timed to keep the buffer intact rather than just
-// barely avoiding a hard stockout.
+// Finds when stock drops below the safety buffer for good — not just below
+// zero, and not a dip that a PO already in the pipeline goes on to fix later
+// (that dip doesn't need a new order, it's already covered).
 function findBufferBreach(rows, safetyUnits) {
   for (let i=0;i<rows.length;i++){
     const row=rows[i];
     if(row.past) continue;
     const effectiveStart=row.start+row.inbound; // stock right after this month's inbound lands
+    const startsBelow=effectiveStart<safetyUnits;
+    const dipsBelow=row.end<safetyUnits;
+    if(!startsBelow && !dipsBelow) continue;
+
+    const recoversLater=rows.slice(i+1).some(r=>!r.past && r.end>=safetyUnits);
+    if(recoversLater) continue; // already-scheduled inbound fixes this later
+
     const anchor=i===TODAY_MONTH_IDX?TODAY:MONTH_DATES[i];
-    if(effectiveStart<safetyUnits) return anchor;
-    if(row.end<safetyUnits){
-      const dailyRate=row.days>0?row.sold/row.days:0;
-      const daysToBreach=dailyRate>0?Math.floor((effectiveStart-safetyUnits)/dailyRate):0;
-      return addDays(anchor,Math.max(0,daysToBreach));
-    }
+    if(startsBelow) return anchor;
+    const dailyRate=row.days>0?row.sold/row.days:0;
+    const daysToBreach=dailyRate>0?Math.floor((effectiveStart-safetyUnits)/dailyRate):0;
+    return addDays(anchor,Math.max(0,daysToBreach));
   }
   return null;
 }
