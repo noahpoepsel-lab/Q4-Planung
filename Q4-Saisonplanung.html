@@ -166,34 +166,20 @@ let products    = [];
 let multipliers = loadStoredMults();
 let activeId    = "krabbelmatte";
 
-function parseCSV(text) {
-  // Full-text CSV parser (handles quoted fields containing commas AND line breaks,
-  // unlike a naive split('\n') which misaligns every fixed-index column after
-  // any cell with an embedded newline).
-  const rows=[]; let row=[]; let field=""; let inQ=false;
-  for(let i=0;i<text.length;i++){
-    const c=text[i];
-    if(inQ){
-      if(c==='"'){
-        if(text[i+1]==='"'){field+='"';i++;}
-        else{inQ=false;}
-      } else {
-        field+=c;
-      }
-    } else {
-      if(c==='"'){inQ=true;}
-      else if(c===','){row.push(field.trim());field="";}
-      else if(c==='\n'||c==='\r'){
-        if(c==='\r'&&text[i+1]==='\n') i++;
-        row.push(field.trim());field="";
-        rows.push(row);row=[];
-      } else {
-        field+=c;
-      }
-    }
+function parseCSVLine(line) {
+  // Line-scoped on purpose: a stray/unescaped quote anywhere in one cell
+  // (e.g. a note with an inch mark or apostrophe) only corrupts that one
+  // line, instead of swallowing subsequent rows if quote-state carried
+  // across the whole document.
+  const result=[]; let cur=""; let inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){inQ=!inQ;}
+    else if(c===','&&!inQ){result.push(cur.trim());cur="";}
+    else{cur+=c;}
   }
-  if(field.length>0||row.length>0){row.push(field.trim());rows.push(row);}
-  return rows;
+  result.push(cur.trim());
+  return result;
 }
 
 function parseNum(s) {
@@ -239,7 +225,7 @@ function etaToMonthIdx(etaStr) {
 }
 
 function extractProducts(csvText) {
-  const rows=parseCSV(csvText);
+  const rows=csvText.split('\n').map(parseCSVLine);
   const result=[];
   const COL={name:0,stock:1,vk:2,po1nr:13,po1qty:14,po1eta:15,po2nr:16,po2qty:17,po2eta:18};
 
