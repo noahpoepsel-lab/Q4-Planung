@@ -273,6 +273,25 @@ function calcFlow(p,mults) {
   });
 }
 
+// Finds when stock first drops below the safety buffer (not just below zero),
+// so incoming orders are timed to keep the buffer intact rather than just
+// barely avoiding a hard stockout.
+function findBufferBreach(rows, safetyUnits) {
+  for (let i=0;i<rows.length;i++){
+    const row=rows[i];
+    if(row.past) continue;
+    const effectiveStart=row.start+row.inbound; // stock right after this month's inbound lands
+    const anchor=i===TODAY_MONTH_IDX?TODAY:MONTH_DATES[i];
+    if(effectiveStart<safetyUnits) return anchor;
+    if(row.end<safetyUnits){
+      const dailyRate=row.days>0?row.sold/row.days:0;
+      const daysToBreach=dailyRate>0?Math.floor((effectiveStart-safetyUnits)/dailyRate):0;
+      return addDays(anchor,Math.max(0,daysToBreach));
+    }
+  }
+  return null;
+}
+
 function calcRec(p,mults) {
   const rows=calcFlow(p,mults);
   const safetyUnits=Math.round(p.baseVK*SAFETY_DAYS);
@@ -283,21 +302,18 @@ function calcRec(p,mults) {
     return{needed:false,deficit:0,recommendation:0,safetyUnits,reason:"ok",endStock};
   }
 
-  let deficit,arrivalBy,reason,firstOOSMonth=null;
+  let deficit,reason,firstOOSMonth=null;
   if(firstOOSIdx!==-1){
-    const row=rows[firstOOSIdx];
-    const dailyRate=row.days>0?row.sold/row.days:0;
-    const daysLeft=dailyRate>0?Math.floor(row.start/dailyRate):row.days;
-    const anchor=firstOOSIdx===TODAY_MONTH_IDX?TODAY:MONTH_DATES[firstOOSIdx];
-    arrivalBy=addDays(anchor,Math.max(0,daysLeft));
     deficit=Math.abs(Math.min(...rows.filter(r=>!r.past).map(r=>r.end)));
     reason="oos";
     firstOOSMonth=MONTHS[firstOOSIdx];
   } else {
-    arrivalBy=new Date("2027-03-31");
     deficit=safetyUnits-endStock;
     reason="buffer";
   }
+
+  const breach=findBufferBreach(rows,safetyUnits);
+  const arrivalBy=breach ?? (firstOOSIdx!==-1 ? MONTH_DATES[firstOOSIdx] : new Date("2027-03-31"));
 
   const totalNeeded=deficit+safetyUnits;
   const recommendation=Math.ceil(totalNeeded/p.vpe)*p.vpe;
