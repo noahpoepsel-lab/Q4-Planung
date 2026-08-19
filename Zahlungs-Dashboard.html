@@ -880,9 +880,9 @@ function getCurrentMonthPayments() {
   }
   // Steuern
   for (const row of steuern) {
-    const val = row.values[m-1];
-    const absVal = Math.abs(val);
-    if (!absVal || y !== 2026) continue;
+    const val = row.byMonth[monthKey(y, m)];
+    const absVal = Math.abs(val || 0);
+    if (!absVal) continue;
     const id = `st_${row.key}_${y}_${String(m).padStart(2,'0')}`;
     if (paid[id]) continue;
     const date = `${y}-${String(m).padStart(2,'0')}-10`;
