@@ -390,12 +390,12 @@ let recurring = [
 
 // ── STEUERN (wird dynamisch vom Apps Script geladen) ──────────────────────────
 let steuern = [];
-let einnahmen = null; // { label, values: [12] }
+let einnahmen = null; // { label, byMonth: { "2026-08": 91884.95, ... } }
 
 // ── APPS SCRIPT KONFIGURATION ─────────────────────────────────────────────────
 // Nach dem Deployment des Apps Scripts die URL hier eintragen:
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzYtQrYl0b1Zt5WWVDLx1RIT__K5-wSdtcFXYTBTpDfdFIAjEeXCoWbndLTD0Jk6_UAsA/exec';
-const CACHE_KEY  = 'zd_data_v6';
+const CACHE_KEY  = 'zd_data_v7';
 const CACHE_TS   = 'zd_data_ts';
 const CACHE_TTL  = 5 * 60 * 1000; // 5 Minuten
 
@@ -455,6 +455,7 @@ function fmtEur(n) {
   return n < 0 ? '+ ' + s : s;
 }
 function parseDate(str) { return str ? new Date(str + 'T00:00:00') : null; }
+function monthKey(year, month1) { return `${year}-${String(month1).padStart(2, '0')}`; }
 
 function isActiveInMonth(r, year, month1) {
   const start = parseDate(r.startDate);
@@ -512,9 +513,13 @@ function getOrderPaymentsForMonth(year, month1) {
 
 function getOtherPaymentsForMonth(year, month1) {
   const result = [];
+  const seenOneTime = new Set(); // Schutz gegen doppelte Zeilen in der Quelle (gleicher Name+Datum+Betrag)
   oneTime.forEach(p => {
     const d = parseDate(p.date);
     if (d.getFullYear() === year && d.getMonth() + 1 === month1) {
+      const dupKey = `${p.name.toLowerCase()}|${p.date}|${p.amount}`;
+      if (seenOneTime.has(dupKey)) return;
+      seenOneTime.add(dupKey);
       result.push({ id: p.id, name: p.name, category: p.category, amount: p.amount, day: d.getDate(), badge: 'once' });
     }
   });
@@ -525,9 +530,8 @@ function getOtherPaymentsForMonth(year, month1) {
   });
   // Steuern dynamisch aus Apps Script (6 Zeilen, Monatswert für year/month1)
   steuern.forEach(row => {
-    if (year !== 2026) return;
     if (row.name.startsWith('Erw.')) return; // Kalkulationszeilen ausblenden
-    const val = row.values[month1 - 1];
+    const val = row.byMonth[monthKey(year, month1)];
     if (val == null || val === 0) return;
     const isIncome = row.name.includes('(+)');
     const amount   = isIncome ? -Math.abs(val) : Math.abs(val);
@@ -694,7 +698,7 @@ function isIncomeTransaction(tx) {
 }
 
 function renderIncomeCard(container) {
-  const planned = einnahmen ? (einnahmen.values[curMonth - 1] || 0) : 0;
+  const planned = einnahmen ? (einnahmen.byMonth[monthKey(curYear, curMonth)] || 0) : 0;
   const received = getIncome(curYear, curMonth).reduce((s, t) => s + t.amount, 0);
   const outstanding = planned - received;
   const pct = planned > 0 ? Math.min(100, Math.round(received / planned * 100)) : 0;
