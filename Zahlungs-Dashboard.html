@@ -531,7 +531,10 @@ function getOtherPaymentsForMonth(year, month1) {
   // Steuern dynamisch aus Apps Script (6 Zeilen, Monatswert für year/month1)
   steuern.forEach(row => {
     if (row.name.startsWith('Erw.')) return; // Kalkulationszeilen ausblenden
-    const val = row.byMonth[monthKey(year, month1)];
+    // Sicherheitsnetz: falls das Apps Script (noch) das alte 'values'-Array
+    // statt 'byMonth' liefert (z.B. weil die falsche Version deployed ist),
+    // hier nicht abstürzen, sondern einfach nichts anzeigen statt zu crashen.
+    const val = row.byMonth ? row.byMonth[monthKey(year, month1)] : null;
     if (val == null || val === 0) return;
     const isIncome = row.name.includes('(+)');
     const amount   = isIncome ? -Math.abs(val) : Math.abs(val);
@@ -698,7 +701,7 @@ function isIncomeTransaction(tx) {
 }
 
 function renderIncomeCard(container) {
-  const planned = einnahmen ? (einnahmen.byMonth[monthKey(curYear, curMonth)] || 0) : 0;
+  const planned = (einnahmen && einnahmen.byMonth) ? (einnahmen.byMonth[monthKey(curYear, curMonth)] || 0) : 0;
   const received = getIncome(curYear, curMonth).reduce((s, t) => s + t.amount, 0);
   const outstanding = planned - received;
   const pct = planned > 0 ? Math.min(100, Math.round(received / planned * 100)) : 0;
@@ -880,7 +883,7 @@ function getCurrentMonthPayments() {
   }
   // Steuern
   for (const row of steuern) {
-    const val = row.byMonth[monthKey(y, m)];
+    const val = row.byMonth ? row.byMonth[monthKey(y, m)] : null;
     const absVal = Math.abs(val || 0);
     if (!absVal) continue;
     const id = `st_${row.key}_${y}_${String(m).padStart(2,'0')}`;
